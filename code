@@ -1,0 +1,118 @@
+!pip install pandas prettytable
+
+import pandas as pd
+from prettytable import PrettyTable
+
+friends = ["Shivani", "Kamali", "Kaviya", "Maviya"]
+columns = ["payer", "beneficiaries", "amount", "description", "split_type"]
+expenses = pd.DataFrame(columns=columns)
+
+def add_expense():
+    payer = input("Enter payer name: ").strip().capitalize()
+    if payer not in friends:
+        print("Invalid name! Please enter a valid friend.")
+        return
+    amount = float(input("Enter amount: "))
+    description = input("Enter description: ").strip()
+    split_type = input("Split equally? (yes/no): ").strip().lower()
+    if split_type == "yes":
+        beneficiaries = friends
+    else:
+        print("Enter names separated by commas (e.g., Shivani, Kamali): ")
+        beneficiaries = [name.strip().capitalize() for name in input().split(",") if name.strip() in friends]
+    if not beneficiaries:
+        print("No valid beneficiaries entered.")
+        return
+    new_expense = pd.DataFrame({
+        "payer": [payer],
+        "beneficiaries": [beneficiaries],
+        "amount": [amount],
+        "description": [description],
+        "split_type": [split_type]
+    })
+    global expenses
+    expenses = pd.concat([expenses, new_expense], ignore_index=True)
+    print("Expense added successfully!\n")
+
+def calculate_summary():
+    total_paid = {f: 0 for f in friends}
+    total_owed = {f: 0 for f in friends}
+    for _, row in expenses.iterrows():
+        payer = row["payer"]
+        amount = row["amount"]
+        beneficiaries = row["beneficiaries"]
+        share = amount / len(beneficiaries)
+        total_paid[payer] += amount
+        for b in beneficiaries:
+            total_owed[b] += share
+    summary = pd.DataFrame({
+        "Name": friends,
+        "Paid": [total_paid[f] for f in friends],
+        "Owes": [total_owed[f] for f in friends]
+    })
+    summary["Balance"] = summary["Paid"] - summary["Owes"]
+    return summary
+
+def display_summary():
+    summary = calculate_summary()
+    table = PrettyTable()
+    table.field_names = ["Name", "Paid (₹)", "Owes (₹)", "Balance (₹)"]
+    for _, row in summary.iterrows():
+        table.add_row([row["Name"], f"{row['Paid']:.2f}", f"{row['Owes']:.2f}", f"{row['Balance']:.2f}"])
+    print("\n=== INDIVIDUAL SUMMARY ===")
+    print(table)
+    print("\n=== SETTLEMENTS ===")
+    settle_balances(summary)
+
+def settle_balances(summary):
+    debtors = summary[summary["Balance"] < 0].sort_values("Balance")
+    creditors = summary[summary["Balance"] > 0].sort_values("Balance", ascending=False)
+    transactions = []
+    debtors = debtors.copy()
+    creditors = creditors.copy()
+    while not debtors.empty and not creditors.empty:
+        debtor = debtors.iloc[0]
+        creditor = creditors.iloc[0]
+        amount = min(-debtor["Balance"], creditor["Balance"])
+        transactions.append((debtor["Name"], creditor["Name"], amount))
+        debtors.at[debtors.index[0], "Balance"] += amount
+        creditors.at[creditors.index[0], "Balance"] -= amount
+        if round(debtors.iloc[0]["Balance"], 2) == 0:
+            debtors = debtors.iloc[1:]
+        if round(creditors.iloc[0]["Balance"], 2) == 0:
+            creditors = creditors.iloc[1:]
+    if transactions:
+        for d, c, a in transactions:
+            print(f"{d} should pay ₹{a:.2f} to {c}")
+    else:
+        print("Everyone is settled!")
+
+def show_history():
+    if expenses.empty:
+        print("\nNo transactions yet!")
+        return
+    print("\n=== TRANSACTION HISTORY ===")
+    table = PrettyTable()
+    table.field_names = ["Payer", "Description", "Amount (₹)", "Split Type", "Beneficiaries"]
+    for _, row in expenses.iterrows():
+        table.add_row([row["payer"], row["description"], f"{row['amount']:.2f}", row["split_type"], ", ".join(row["beneficiaries"])])
+    print(table)
+
+while True:
+    print("\n=== EXPENSE TRACKER ===")
+    print("1. Add Expense")
+    print("2. View Summary")
+    print("3. View Transaction History")
+    print("4. Exit")
+    choice = input("Enter your choice: ").strip()
+    if choice == "1":
+        add_expense()
+    elif choice == "2":
+        display_summary()
+    elif choice == "3":
+        show_history()
+    elif choice == "4":
+        print("Exiting... Goodbye Shivani!")
+        break
+    else:
+        print("Invalid choice. Try again!")
